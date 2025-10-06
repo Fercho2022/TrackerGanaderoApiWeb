@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test de Mapa - Tracker Ganadero</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin="" />
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        #map {
+            height: 600px;
+            width: 100%;
+            border-radius: 8px;
+            border: 2px solid #ddd;
+        }
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        button {
+            padding: 10px 15px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .status {
+            padding: 10px;
+            margin-top: 10px;
+            background: #e9ecef;
+            border-radius: 4px;
+        }
+        .farm-select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗺️ Test de Mapa en Tiempo Real - Tracker Ganadero</h1>
+
+        <div class="controls">
+            <select id="farmSelect" class="farm-select">
+                <option value="">Seleccionar granja...</option>
+                <option value="7">Entre Ríos - Vaca GPS</option>
+            </select>
+            <button onclick="loadAnimals()">Cargar Animales</button>
+            <button onclick="refreshData()">Actualizar Datos</button>
+            <button onclick="debugMap()">Debug Info</button>
+        </div>
+
+        <div id="map"></div>
+
+        <div class="status">
+            <strong>Estado:</strong> <span id="status">Listo para cargar datos</span><br>
+            <strong>API Base:</strong> http://localhost:5192<br>
+            <strong>Animales encontrados:</strong> <span id="animalCount">0</span>
+        </div>
+    </div>
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+
+    <script>
+        let map;
+        let markers = {};
+        let mapInitialized = false;
+
+        // Función para esperar a que Leaflet se cargue
+        function waitForLeaflet(callback, maxAttempts = 50) {
+            let attempts = 0;
+            const checkLeaflet = () => {
+                attempts++;
+                if (typeof L !== 'undefined') {
+                    console.log("Leaflet is ready!");
+                    callback();
+                } else if (attempts < maxAttempts) {
+                    console.log(`Waiting for Leaflet... attempt ${attempts}`);
+                    setTimeout(checkLeaflet, 200);
+                } else {
+                    console.error("Leaflet failed to load after maximum attempts");
+                    updateStatus("Error: Leaflet no se pudo cargar");
+                }
+            };
+            checkLeaflet();
+        }
+
+        function initializeMap() {
+            console.log("initializeMap called");
+            updateStatus("Inicializando mapa...");
+
+            if (mapInitialized) {
+                console.log("Map already initialized");
+                return;
+            }
+
+            const mapElement = document.getElementById("map");
+            if (!mapElement) {
+                console.error("Map element not found");
+                updateStatus("Error: Elemento del mapa no encontrado");
+                return;
+            }
+
+            waitForLeaflet(() => {
+                try {
+                    console.log("Initializing Leaflet map...");
+                    updateStatus("Creando mapa con Leaflet...");
+
+                    // Limpiar cualquier mapa existente
+                    if (map) {
+                        map.remove();
+                    }
+
+                    // Inicializar mapa centrado en Entre Ríos, Argentina
+                    map = L.map('map', {
+                        center: [-33.0167, -58.5167],
+                        zoom: 15,
+                        zoomControl: true
+                    });
+
+                    // Agregar capa base de OpenStreetMap
+                    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                        maxZoom: 19
+                    });
+
+                    osmLayer.addTo(map);
+
+                    // Esperar a que el mapa se renderice completamente
+                    map.whenReady(() => {
+                        console.log("Map is ready and rendered");
+                        mapInitialized = true;
+                        updateStatus("Mapa inicializado correctamente");
+
+                        // Invalidar el tamaño para asegurar que se renderice correctamente
+                        setTimeout(() => {
+                            map.invalidateSize();
+                            console.log("Map size invalidated");
+                        }, 100);
+                    });
+
+                    console.log("OpenStreetMap initialized successfully");
+
+                } catch (error) {
+                    console.error("Error initializing map:", error);
+                    updateStatus("Error inicializando mapa: " + error.message);
+                    mapInitialized = false;
+                }
+            });
+        }
+
+        async function loadAnimals() {
+            const farmSelect = document.getElementById('farmSelect');
+            const farmId = farmSelect.value;
+
+            if (!farmId) {
+                updateStatus("Por favor selecciona una granja");
+                return;
+            }
+
+            updateStatus("Cargando animales de la granja " + farmId + "...");
+
+            try {
+                const response = await fetch(`http://localhost:5192/api/Tracking/farm/${farmId}/animals`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const animals = await response.json();
+                console.log("Animals data received:", animals);
+
+                document.getElementById('animalCount').textContent = animals.length;
+
+                if (animals.length === 0) {
+                    updateStatus("No se encontraron animales en esta granja");
+                    return;
+                }
+
+                updateMapMarkers(animals);
+                updateStatus(`Cargados ${animals.length} animales correctamente`);
+
+            } catch (error) {
+                console.error("Error loading animals:", error);
+                updateStatus("Error cargando animales: " + error.message);
+            }
+        }
+
+        function updateMapMarkers(animalsData) {
+            console.log("updateMapMarkers called with data:", animalsData);
+
+            if (!map) {
+                console.warn("Map not initialized, initializing now...");
+                initializeMap();
+                setTimeout(() => updateMapMarkers(animalsData), 2000);
+                return;
+            }
+
+            if (!animalsData || animalsData.length === 0) {
+                console.warn("No animals data provided");
+                return;
+            }
+
+            try {
+                // Limpiar marcadores existentes
+                Object.values(markers).forEach(marker => {
+                    map.removeLayer(marker);
+                });
+                markers = {};
+
+                console.log(`Processing ${animalsData.length} animals`);
+
+                // Array para ajustar bounds del mapa
+                const markerLatLngs = [];
+
+                // Agregar nuevos marcadores
+                animalsData.forEach(animal => {
+                    console.log("Processing animal:", animal);
+
+                    // Verificar que el animal tenga ubicación
+                    if (!animal.currentLocation || !animal.currentLocation.latitude || !animal.currentLocation.longitude) {
+                        console.warn("Animal has no location data:", animal);
+                        return;
+                    }
+
+                    const latLng = [animal.currentLocation.latitude, animal.currentLocation.longitude];
+                    markerLatLngs.push(latLng);
+
+                    console.log(`Adding marker for ${animal.name} at ${latLng}`);
+
+                    // Elegir color del marcador según estado
+                    let markerColor = '#4285f4'; // azul por defecto
+                    switch (animal.status?.toLowerCase()) {
+                        case 'healthy':
+                            markerColor = '#34a853'; // verde
+                            break;
+                        case 'sick':
+                            markerColor = '#ea4335'; // rojo
+                            break;
+                        case 'monitoring':
+                            markerColor = '#fbbc04'; // amarillo
+                            break;
+                    }
+
+                    // Crear marcador personalizado
+                    const marker = L.circleMarker(latLng, {
+                        radius: 12,
+                        fillColor: markerColor,
+                        color: '#ffffff',
+                        weight: 3,
+                        opacity: 1,
+                        fillOpacity: 0.9
+                    });
+
+                    // Popup con información del animal
+                    const popupContent = `
+                        <div style="min-width: 200px;">
+                            <h6 style="margin: 0 0 8px 0; font-weight: bold; color: #333;">${animal.name}</h6>
+                            ${animal.tag ? `<p style="margin: 4px 0;"><strong>Tag:</strong> ${animal.tag}</p>` : ''}
+                            <p style="margin: 4px 0;"><strong>Estado:</strong> ${animal.status || 'Healthy'}</p>
+                            <p style="margin: 4px 0;"><strong>Coordenadas:</strong> ${latLng[0].toFixed(6)}, ${latLng[1].toFixed(6)}</p>
+                            <p style="margin: 4px 0;"><strong>Velocidad:</strong> ${animal.currentLocation.speed || 0} km/h</p>
+                            <p style="margin: 4px 0;"><strong>Temperatura:</strong> ${animal.currentLocation.temperature || 'N/A'}°C</p>
+                            <p style="margin: 4px 0;"><strong>Altitud:</strong> ${animal.currentLocation.altitude || 'N/A'} m</p>
+                            <p style="margin: 4px 0;"><strong>Actividad:</strong> ${animal.currentLocation.activityLevel || 'N/A'}</p>
+                            <p style="margin: 4px 0;"><strong>Última actualización:</strong> ${new Date(animal.currentLocation.timestamp).toLocaleTimeString()}</p>
+                        </div>
+                    `;
+
+                    marker.bindPopup(popupContent);
+                    marker.addTo(map);
+                    markers[animal.id] = marker;
+
+                    console.log(`Marker added for ${animal.name}`);
+                });
+
+                // Ajustar vista del mapa para mostrar todos los marcadores
+                if (markerLatLngs.length > 0) {
+                    console.log(`Adjusting map view for ${markerLatLngs.length} markers`);
+
+                    if (markerLatLngs.length === 1) {
+                        // Si solo hay un marcador, centrar en él
+                        map.setView(markerLatLngs[0], 16);
+                        console.log(`Centered map on single marker at ${markerLatLngs[0]}`);
+                    } else {
+                        // Si hay múltiples marcadores, ajustar bounds
+                        const group = new L.featureGroup(Object.values(markers));
+                        map.fitBounds(group.getBounds(), { padding: [20, 20] });
+                        console.log("Fitted map bounds to show all markers");
+                    }
+
+                    // Invalidar tamaño para asegurar renderizado correcto
+                    setTimeout(() => {
+                        map.invalidateSize();
+                    }, 100);
+                } else {
+                    console.warn("No valid animal locations found");
+                }
+
+            } catch (error) {
+                console.error("Error updating map markers:", error);
+                updateStatus("Error actualizando marcadores: " + error.message);
+            }
+        }
+
+        function refreshData() {
+            const farmSelect = document.getElementById('farmSelect');
+            if (farmSelect.value) {
+                loadAnimals();
+            } else {
+                updateStatus("Selecciona una granja primero");
+            }
+        }
+
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+            console.log("Status:", message);
+        }
+
+        function debugMap() {
+            console.log("Map debug info:");
+            console.log("- Map object:", map);
+            console.log("- Map initialized:", mapInitialized);
+            console.log("- Markers count:", Object.keys(markers).length);
+            console.log("- Leaflet available:", typeof L !== 'undefined');
+
+            let debugInfo = `
+Map Object: ${map ? 'Initialized' : 'Not initialized'}
+Map Ready: ${mapInitialized}
+Markers: ${Object.keys(markers).length}
+Leaflet: ${typeof L !== 'undefined' ? 'Available' : 'Not available'}
+            `;
+
+            updateStatus("Debug info logged to console");
+            alert(debugInfo);
+        }
+
+        // Inicializar mapa cuando la página carga
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeMap();
+        });
+    </script>
+</body>
+</html>

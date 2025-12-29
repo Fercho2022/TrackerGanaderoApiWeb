@@ -253,6 +253,107 @@ namespace ApiWebTrackerGanado.Controllers
                 return BadRequest(new { success = false, message = ex.Message, details = ex.StackTrace });
             }
         }
+
+        [HttpPost("setup-granja-central")]
+        // Endpoint para configurar Granja Central con trackers y animales
+        public async Task<IActionResult> SetupGranjaCentral()
+        {
+            try
+            {
+                var dbContext = HttpContext.RequestServices.GetRequiredService<ApiWebTrackerGanado.Data.CattleTrackingContext>();
+
+                // STEP 1: Crear Granja Central si no existe (usando WHERE NOT EXISTS)
+                var createFarmSql = @"
+                    INSERT INTO ""Farms"" (""Name"", ""Address"", ""UserId"", ""CreatedAt"")
+                    SELECT 'Granja Central', 'Granja Central - Centro de Operaciones GPS', 1, NOW()
+                    WHERE NOT EXISTS (SELECT 1 FROM ""Farms"" WHERE ""Name"" = 'Granja Central')";
+
+                await dbContext.Database.ExecuteSqlRawAsync(createFarmSql);
+
+                // STEP 2: Crear trackers uno por uno para evitar problemas de conflictos
+                for (int i = 1; i <= 10; i++)
+                {
+                    var deviceId = $"COW_NORTH_FARM_{i:D2}";
+                    var trackerName = $"Tracker Granja Central {i:D2}";
+                    var createTrackerSql = @"
+                        INSERT INTO ""Trackers"" (""DeviceId"", ""Name"", ""Status"", ""FirmwareVersion"", ""CreatedAt"")
+                        SELECT @deviceId, @trackerName, 'Active', 'v2.0', NOW()
+                        WHERE NOT EXISTS (SELECT 1 FROM ""Trackers"" WHERE ""DeviceId"" = @deviceId)";
+
+                    await dbContext.Database.ExecuteSqlRawAsync(createTrackerSql,
+                        new Npgsql.NpgsqlParameter("@deviceId", deviceId),
+                        new Npgsql.NpgsqlParameter("@trackerName", trackerName));
+                }
+
+                // STEP 3: Crear animales para Granja Central uno por uno
+                string[] breeds = { "Holstein", "Angus", "Brahman", "Hereford" };
+                for (int i = 1; i <= 10; i++)
+                {
+                    var deviceId = $"COW_NORTH_FARM_{i:D2}";
+                    var animalName = $"Vaca Central {i:D2}";
+                    var tag = $"GC{i:D3}";
+                    var gender = i % 2 == 0 ? "Female" : "Male";
+                    var breed = breeds[(i - 1) % breeds.Length];
+                    var weight = 400.0 + (i * 10);
+
+                    var createAnimalSql = @"
+                        INSERT INTO ""Animals"" (""Name"", ""Tag"", ""Gender"", ""Breed"", ""BirthDate"", ""Weight"", ""Status"", ""FarmId"", ""TrackerId"", ""CreatedAt"", ""UpdatedAt"")
+                        SELECT @animalName, @tag, @gender, @breed, '2021-01-01', @weight, 'Active',
+                               (SELECT ""Id"" FROM ""Farms"" WHERE ""Name"" = 'Granja Central'),
+                               (SELECT ""Id"" FROM ""Trackers"" WHERE ""DeviceId"" = @deviceId),
+                               NOW(), NOW()
+                        WHERE NOT EXISTS (SELECT 1 FROM ""Animals"" WHERE ""Tag"" = @tag)";
+
+                    await dbContext.Database.ExecuteSqlRawAsync(createAnimalSql,
+                        new Npgsql.NpgsqlParameter("@animalName", animalName),
+                        new Npgsql.NpgsqlParameter("@tag", tag),
+                        new Npgsql.NpgsqlParameter("@gender", gender),
+                        new Npgsql.NpgsqlParameter("@breed", breed),
+                        new Npgsql.NpgsqlParameter("@weight", weight),
+                        new Npgsql.NpgsqlParameter("@deviceId", deviceId));
+                }
+
+                // STEP 4: Verificar la configuración
+                var verificationSql = @"
+                    SELECT
+                        f.""Name"" as ""FarmName"",
+                        f.""Id"" as ""FarmId"",
+                        COUNT(a.""Id"") as ""AnimalCount"",
+                        COUNT(t.""Id"") as ""TrackerCount""
+                    FROM ""Farms"" f
+                    LEFT JOIN ""Animals"" a ON f.""Id"" = a.""FarmId""
+                    LEFT JOIN ""Trackers"" t ON a.""TrackerId"" = t.""Id""
+                    WHERE f.""Name"" = 'Granja Central'
+                    GROUP BY f.""Name"", f.""Id""";
+
+                return Ok(new {
+                    success = true,
+                    message = "Granja Central configurada exitosamente",
+                    details = new {
+                        farmCreated = "Granja Central",
+                        trackersCreated = "COW_NORTH_FARM_01 - COW_NORTH_FARM_10",
+                        animalsCreated = "GC001 - GC010",
+                        animalTags = "GC001, GC002, GC003, GC004, GC005, GC006, GC007, GC008, GC009, GC010",
+                        deviceIds = "COW_NORTH_FARM_01 - COW_NORTH_FARM_10",
+                        nextSteps = new string[] {
+                            "1. Ejecutar: python simple_10_cows_emulator.py",
+                            "2. Abrir el mapa en tiempo real",
+                            "3. Seleccionar 'Granja Central' en el dropdown",
+                            "4. Ver los 10 animales en movimiento"
+                        }
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new {
+                    success = false,
+                    message = ex.Message,
+                    details = ex.StackTrace,
+                    error = "Error configurando Granja Central"
+                });
+            }
+        }
     }
 }
 

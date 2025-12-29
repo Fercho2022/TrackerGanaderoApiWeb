@@ -13,7 +13,10 @@
       "Bash(tasklist:*)",
       "Bash(taskkill:*)",
       "Bash(cmd /c:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(dotnet ef migrations add:*)",
+      "Bash(dotnet ef migrations:*)",
+      "Bash(dotnet ef database:*)"
     ],
     "deny": [],
     "ask": []

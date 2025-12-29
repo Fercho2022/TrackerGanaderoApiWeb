@@ -66,7 +66,7 @@ namespace ApiWebTrackerGanado.Repositories
                 .Where(a => a.Id == id)
                 .Include(a => a.Farm)
                 .Include(a => a.Tracker)
-                .Include(a => a.HealthRecords.OrderByDescending(hr => hr.TreatmentDate).Take(5))
+                .Include(a => a.HealthRecords.OrderByDescending(hr => hr.RecordDate).Take(5))
                 .Include(a => a.WeightRecords.OrderByDescending(wr => wr.WeightDate).Take(5))
                 .FirstOrDefaultAsync();
         }
@@ -86,18 +86,25 @@ namespace ApiWebTrackerGanado.Repositories
 
         public async Task<IEnumerable<Animal>> GetAnimalsOutsideBoundariesAsync(int farmId)
         {
-            var farm = await _context.Farms.FindAsync(farmId);
-            if (farm?.Boundaries == null) return new List<Animal>();
+            // TODO: Re-implement with new boundary system using point-in-polygon calculations
+            // Temporarily disabled during boundary system migration
+            return new List<Animal>();
 
+            /*
+            var farm = await _context.Farms
+                .Include(f => f.BoundaryCoordinates)
+                .FirstOrDefaultAsync(f => f.Id == farmId);
+
+            if (farm?.BoundaryCoordinates == null || !farm.BoundaryCoordinates.Any())
+                return new List<Animal>();
+
+            // Need to implement point-in-polygon algorithm here
+            // This would check if each animal's latest location is inside the boundary polygon
             return await _context.Animals
                 .Where(a => a.FarmId == farmId && a.TrackerId != null)
-                .Where(a => _context.LocationHistories
-                    .Where(lh => lh.AnimalId == a.Id)
-                    .OrderByDescending(lh => lh.Timestamp)
-                    .Take(1)
-                    .Any(lh => !farm.Boundaries.Contains(lh.Location)))
                 .Include(a => a.Tracker)
                 .ToListAsync();
+            */
         }
 
         public async Task<IEnumerable<Animal>> GetBreedingFemalesAsync(int farmId)

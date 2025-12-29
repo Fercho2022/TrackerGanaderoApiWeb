@@ -210,6 +210,38 @@ namespace ApiWebTrackerGanado.Migrations
                     b.ToTable("Farms");
                 });
 
+            modelBuilder.Entity("ApiWebTrackerGanado.Models.FarmBoundary", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FarmId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Latitude")
+                        .HasPrecision(10, 8)
+                        .HasColumnType("numeric(10,8)");
+
+                    b.Property<decimal>("Longitude")
+                        .HasPrecision(11, 8)
+                        .HasColumnType("numeric(11,8)");
+
+                    b.Property<int>("SequenceOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId", "SequenceOrder");
+
+                    b.ToTable("FarmBoundaries");
+                });
+
             modelBuilder.Entity("ApiWebTrackerGanado.Models.HealthRecord", b =>
                 {
                     b.Property<int>("Id")
@@ -583,6 +615,17 @@ namespace ApiWebTrackerGanado.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("ApiWebTrackerGanado.Models.FarmBoundary", b =>
+                {
+                    b.HasOne("ApiWebTrackerGanado.Models.Farm", "Farm")
+                        .WithMany("BoundaryCoordinates")
+                        .HasForeignKey("FarmId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Farm");
+                });
+
             modelBuilder.Entity("ApiWebTrackerGanado.Models.HealthRecord", b =>
                 {
                     b.HasOne("ApiWebTrackerGanado.Models.Animal", "Animal")
@@ -681,6 +724,8 @@ namespace ApiWebTrackerGanado.Migrations
             modelBuilder.Entity("ApiWebTrackerGanado.Models.Farm", b =>
                 {
                     b.Navigation("Animals");
+
+                    b.Navigation("BoundaryCoordinates");
 
                     b.Navigation("Pastures");
                 });

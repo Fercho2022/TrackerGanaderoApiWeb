@@ -36,23 +36,39 @@ namespace ApiWebTrackerGanado.Services
         public async Task ProcessTrackerDataAsync(TrackerDataDto trackerData)
         {
             var tracker = await _trackerRepository.GetTrackerWithAnimalAsync(trackerData.DeviceId);
-            if (tracker?.Animal == null) return;
 
-            // Update tracker status
+            // Si el tracker es desconocido o no está asignado, solo registrar el historial para su posterior descubrimiento.
+            if (tracker?.Animal == null)
+            {
+                var undiscoveredHistory = new LocationHistory
+                {
+                    DeviceId = trackerData.DeviceId, // Esencial para el descubrimiento
+                    Latitude = trackerData.Latitude,
+                    Longitude = trackerData.Longitude,
+                    Altitude = trackerData.Altitude,
+                    Speed = trackerData.Speed,
+                    ActivityLevel = trackerData.ActivityLevel,
+                    Temperature = trackerData.Temperature,
+                    SignalStrength = trackerData.SignalStrength,
+                    Timestamp = trackerData.Timestamp.ToUniversalTime()
+                };
+                await _locationHistoryRepository.AddAsync(undiscoveredHistory);
+                return; // Terminar aquí. El servicio de descubrimiento hará el resto.
+            }
+
+            // --- Lógica existente para trackers registrados y asignados ---
+
+            // Actualizar estado del tracker
             tracker.BatteryLevel = trackerData.BatteryLevel;
-            tracker.LastSeen = trackerData.Timestamp.Kind == DateTimeKind.Utc
-                ? trackerData.Timestamp
-                : trackerData.Timestamp.ToUniversalTime();
+            tracker.LastSeen = trackerData.Timestamp.ToUniversalTime();
             await _trackerRepository.UpdateAsync(tracker);
 
-            // Create location history entry
-            var location = GeometryHelper.CreatePoint(trackerData.Longitude, trackerData.Latitude);
-
+            // Crear la entrada en el historial de ubicaciones
             var locationHistory = new LocationHistory
             {
                 AnimalId = tracker.Animal.Id,
                 TrackerId = tracker.Id,
-                // Location = location, // Temporarily disabled for PostGIS migration
+                DeviceId = trackerData.DeviceId, // Corregir: asegurar que el DeviceId se guarde
                 Latitude = trackerData.Latitude,
                 Longitude = trackerData.Longitude,
                 Altitude = trackerData.Altitude,
@@ -60,18 +76,16 @@ namespace ApiWebTrackerGanado.Services
                 ActivityLevel = trackerData.ActivityLevel,
                 Temperature = trackerData.Temperature,
                 SignalStrength = trackerData.SignalStrength,
-                Timestamp = trackerData.Timestamp.Kind == DateTimeKind.Utc
-                    ? trackerData.Timestamp
-                    : trackerData.Timestamp.ToUniversalTime()
+                Timestamp = trackerData.Timestamp.ToUniversalTime()
             };
 
             await _locationHistoryRepository.AddAsync(locationHistory);
 
-            // Check for alerts
+            // Comprobar alertas
             await _alertService.CheckLocationAlertsAsync(tracker.Animal, locationHistory);
             await _alertService.CheckActivityAlertsAsync(tracker.Animal, trackerData.ActivityLevel);
 
-            // Send real-time update
+            // Enviar actualización en tiempo real
             var locationDto = new LocationDto
             {
                 Latitude = trackerData.Latitude,

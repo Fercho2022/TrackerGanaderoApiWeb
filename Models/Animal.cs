@@ -34,6 +34,13 @@ namespace ApiWebTrackerGanado.Models
         public int? TrackerId { get; set; }
         public Tracker? Tracker { get; set; }
 
+        /// <summary>
+        /// Relación con el CustomerTracker asignado a este animal
+        /// Conecta la gestión de clientes con la gestión de animales
+        /// </summary>
+        public int? CustomerTrackerId { get; set; }
+        public CustomerTracker? CustomerTracker { get; set; }
+
         public ICollection<LocationHistory> LocationHistories { get; set; } = new List<LocationHistory>();
         public ICollection<HealthRecord> HealthRecords { get; set; } = new List<HealthRecord>();
         public ICollection<WeightRecord> WeightRecords { get; set; } = new List<WeightRecord>();

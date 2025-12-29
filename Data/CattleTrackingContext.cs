@@ -21,6 +21,12 @@ namespace ApiWebTrackerGanado.Data
         public DbSet<WeightRecord> WeightRecords { get; set; }
         public DbSet<BreedingRecord> BreedingRecords { get; set; }
         public DbSet<Transaction> Transactions { get; set; }
+        public DbSet<FarmBoundary> FarmBoundaries { get; set; }
+
+        // Nuevas entidades para gestión de clientes y licencias
+        public DbSet<Customer> Customers { get; set; }
+        public DbSet<License> Licenses { get; set; }
+        public DbSet<CustomerTracker> CustomerTrackers { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -42,8 +48,22 @@ namespace ApiWebTrackerGanado.Data
                 entity.HasOne(e => e.User)
                       .WithMany(e => e.Farms)
                       .HasForeignKey(e => e.UserId);
-                // Temporarily disabled for testing
-                // entity.Property(e => e.Boundaries).HasColumnType("geometry");
+                entity.HasMany(e => e.BoundaryCoordinates)
+                      .WithOne(e => e.Farm)
+                      .HasForeignKey(e => e.FarmId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // FarmBoundary Configuration
+            modelBuilder.Entity<FarmBoundary>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasOne(e => e.Farm)
+                      .WithMany(e => e.BoundaryCoordinates)
+                      .HasForeignKey(e => e.FarmId);
+                entity.Property(e => e.Latitude).HasPrecision(10, 8);
+                entity.Property(e => e.Longitude).HasPrecision(11, 8);
+                entity.HasIndex(e => new { e.FarmId, e.SequenceOrder });
             });
 
             // Animal Configuration
@@ -56,6 +76,10 @@ namespace ApiWebTrackerGanado.Data
                 entity.HasOne(e => e.Tracker)
                       .WithOne(e => e.Animal)
                       .HasForeignKey<Animal>(e => e.TrackerId)
+                      .IsRequired(false);
+                entity.HasOne(e => e.CustomerTracker)
+                      .WithOne(e => e.AssignedAnimal)
+                      .HasForeignKey<Animal>(e => e.CustomerTrackerId)
                       .IsRequired(false);
                 entity.Property(e => e.Weight).HasPrecision(10, 2);
             });
@@ -152,6 +176,58 @@ namespace ApiWebTrackerGanado.Data
                       .WithMany()
                       .HasForeignKey(e => e.AnimalId);
                 entity.Property(e => e.Amount).HasPrecision(12, 2);
+            });
+
+            // Customer Configuration
+            modelBuilder.Entity<Customer>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasOne(e => e.User)
+                      .WithOne()
+                      .HasForeignKey<Customer>(e => e.UserId);
+                entity.HasIndex(e => e.TaxId).IsUnique();
+                entity.HasIndex(e => e.CompanyName);
+                entity.Property(e => e.CompanyName).IsRequired();
+            });
+
+            // License Configuration
+            modelBuilder.Entity<License>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasOne(e => e.Customer)
+                      .WithMany(e => e.Licenses)
+                      .HasForeignKey(e => e.CustomerId);
+                entity.HasIndex(e => e.LicenseKey).IsUnique();
+                entity.Property(e => e.LicenseKey).IsRequired();
+                entity.HasIndex(e => new { e.Status, e.ExpiresAt });
+            });
+
+            // CustomerTracker Configuration
+            modelBuilder.Entity<CustomerTracker>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.HasOne(e => e.Customer)
+                      .WithMany(e => e.CustomerTrackers)
+                      .HasForeignKey(e => e.CustomerId);
+                entity.HasOne(e => e.Tracker)
+                      .WithMany(e => e.CustomerTrackers)
+                      .HasForeignKey(e => e.TrackerId);
+                entity.HasOne(e => e.AssignedByUser)
+                      .WithMany()
+                      .HasForeignKey(e => e.AssignedByUserId)
+                      .IsRequired(false);
+                entity.HasOne(e => e.License)
+                      .WithMany()
+                      .HasForeignKey(e => e.LicenseId)
+                      .IsRequired(false);
+
+                // Constraint: Un tracker solo puede estar asignado a un cliente a la vez
+                entity.HasIndex(e => new { e.TrackerId, e.Status })
+                      .HasDatabaseName("IX_CustomerTracker_OneActivePerTracker")
+                      .HasFilter("\"Status\" = 'Active'")
+                      .IsUnique();
+
+                entity.HasIndex(e => new { e.CustomerId, e.Status });
             });
         }
     }

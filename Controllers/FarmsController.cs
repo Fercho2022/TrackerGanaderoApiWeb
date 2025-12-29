@@ -27,9 +27,9 @@ namespace ApiWebTrackerGanado.Controllers
             IEnumerable<Farm> farms;
 
             if (userId.HasValue)
-                farms = await _farmRepository.GetFarmsByUserAsync(userId.Value);
+                farms = await _farmRepository.GetFarmsByUserWithBoundariesAsync(userId.Value);
             else
-                farms = await _farmRepository.GetAllAsync();
+                farms = await _farmRepository.GetAllWithBoundariesAsync();
 
             var farmDtos = farms.Select(f => new FarmDto
             {
@@ -40,7 +40,9 @@ namespace ApiWebTrackerGanado.Controllers
                 Longitude = f.Longitude,
                 UserId = f.UserId,
                 CreatedAt = f.CreatedAt,
-                BoundaryCoordinates = new List<LatLngDto>() // Temporarily empty
+                BoundaryCoordinates = f.BoundaryCoordinates?.OrderBy(b => b.SequenceOrder)
+                    .Select(b => new LatLngDto { Lat = b.Latitude, Lng = b.Longitude })
+                    .ToList() ?? new List<LatLngDto>()
             }).ToList();
 
             return Ok(farmDtos);
@@ -49,7 +51,7 @@ namespace ApiWebTrackerGanado.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<FarmDto>> GetFarm(int id)
         {
-            var farm = await _farmRepository.GetByIdAsync(id);
+            var farm = await _farmRepository.GetByIdWithBoundariesAsync(id);
             if (farm == null) return NotFound();
 
             var farmDto = new FarmDto
@@ -61,7 +63,9 @@ namespace ApiWebTrackerGanado.Controllers
                 Longitude = farm.Longitude,
                 UserId = farm.UserId,
                 CreatedAt = farm.CreatedAt,
-                BoundaryCoordinates = new List<LatLngDto>() // Temporarily empty
+                BoundaryCoordinates = farm.BoundaryCoordinates?.OrderBy(b => b.SequenceOrder)
+                    .Select(b => new LatLngDto { Lat = b.Latitude, Lng = b.Longitude })
+                    .ToList() ?? new List<LatLngDto>()
             };
 
             return Ok(farmDto);
@@ -109,7 +113,11 @@ namespace ApiWebTrackerGanado.Controllers
 
             if (updateFarmDto.BoundaryCoordinates?.Any() == true)
             {
-                farm.Boundaries = GeometryHelper.CreatePolygonFromGoogleMapsCoordinates(updateFarmDto.BoundaryCoordinates);
+                // Clear existing boundaries
+                await _farmRepository.ClearFarmBoundariesAsync(farm.Id);
+
+                // Add new boundaries
+                await _farmRepository.SetFarmBoundariesAsync(farm.Id, updateFarmDto.BoundaryCoordinates);
             }
 
             await _farmRepository.UpdateAsync(farm);
@@ -123,16 +131,15 @@ namespace ApiWebTrackerGanado.Controllers
             var farm = await _farmRepository.GetByIdAsync(farmId);
             if (farm == null) return NotFound();
 
+            // Clear existing boundaries
+            await _farmRepository.ClearFarmBoundariesAsync(farmId);
+
             if (boundaries?.Any() == true)
             {
-                farm.Boundaries = GeometryHelper.CreatePolygonFromGoogleMapsCoordinates(boundaries);
-            }
-            else
-            {
-                farm.Boundaries = null;
+                // Add new boundaries
+                await _farmRepository.SetFarmBoundariesAsync(farmId, boundaries);
             }
 
-            await _farmRepository.UpdateAsync(farm);
             return Ok(true);
         }
 

@@ -46,21 +46,26 @@ namespace ApiWebTrackerGanado
                 await ExecuteCommand(connection, @"
                     CREATE TABLE IF NOT EXISTS ""Users"" (
                         ""Id"" SERIAL PRIMARY KEY,
+                        ""Name"" TEXT NOT NULL,
                         ""Email"" TEXT NOT NULL,
                         ""PasswordHash"" TEXT NOT NULL,
-                        ""FirstName"" TEXT NOT NULL,
-                        ""LastName"" TEXT NOT NULL,
-                        ""CreatedAt"" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-                        ""UpdatedAt"" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+                        ""Role"" TEXT NOT NULL DEFAULT 'User',
+                        ""IsActive"" BOOLEAN NOT NULL DEFAULT TRUE,
+                        ""CreatedAt"" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
                     );
                     CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Users_Email"" ON ""Users""(""Email"");
                 ");
 
-                // 2. Trackers table
+                // 2. Trackers table (updated with new customer management fields)
                 await ExecuteCommand(connection, @"
                     CREATE TABLE IF NOT EXISTS ""Trackers"" (
                         ""Id"" SERIAL PRIMARY KEY,
                         ""DeviceId"" TEXT NOT NULL,
+                        ""Name"" TEXT,
+                        ""SerialNumber"" TEXT,
+                        ""Manufacturer"" TEXT,
+                        ""Status"" TEXT NOT NULL DEFAULT 'Active',
+                        ""IsAvailableForAssignment"" BOOLEAN NOT NULL DEFAULT TRUE,
                         ""BatteryLevel"" DOUBLE PRECISION NOT NULL,
                         ""IsActive"" BOOLEAN NOT NULL,
                         ""LastHeartbeat"" TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -68,6 +73,11 @@ namespace ApiWebTrackerGanado
                         ""UpdatedAt"" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
                     );
                     CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Trackers_DeviceId"" ON ""Trackers""(""DeviceId"");
+                    ALTER TABLE ""Trackers"" ADD COLUMN IF NOT EXISTS ""Name"" TEXT;
+                    ALTER TABLE ""Trackers"" ADD COLUMN IF NOT EXISTS ""SerialNumber"" TEXT;
+                    ALTER TABLE ""Trackers"" ADD COLUMN IF NOT EXISTS ""Manufacturer"" TEXT;
+                    ALTER TABLE ""Trackers"" ADD COLUMN IF NOT EXISTS ""Status"" TEXT NOT NULL DEFAULT 'Active';
+                    ALTER TABLE ""Trackers"" ADD COLUMN IF NOT EXISTS ""IsAvailableForAssignment"" BOOLEAN NOT NULL DEFAULT TRUE;
                 ");
 
                 // 3. Farms table - add missing Address column
@@ -230,6 +240,13 @@ namespace ApiWebTrackerGanado
                     );
                     CREATE INDEX IF NOT EXISTS ""IX_PastureUsages_PastureId"" ON ""PastureUsages""(""PastureId"");
                     CREATE INDEX IF NOT EXISTS ""IX_PastureUsages_AnimalId"" ON ""PastureUsages""(""AnimalId"");
+                ");
+
+                // Insert test user if not exists
+                await ExecuteCommand(connection, @"
+                    INSERT INTO ""Users"" (""Name"", ""Email"", ""PasswordHash"", ""Role"", ""IsActive"")
+                    SELECT 'Test User', 'test@trackerganadero.com', 'hashed_password', 'User', TRUE
+                    WHERE NOT EXISTS (SELECT 1 FROM ""Users"" WHERE ""Email"" = 'test@trackerganadero.com');
                 ");
 
                 Console.WriteLine("✅ All database tables created successfully!");

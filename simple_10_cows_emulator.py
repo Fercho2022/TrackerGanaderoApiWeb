@@ -35,8 +35,8 @@ class Simple10CowsEmulator:
             lng_offset = radius * math.sin(math.radians(angle))
 
             cow = {
-                'device_id': f"COW_GPS_ER_{i:02d}",
-                'name': f"Vaca Entre Rios {i:02d}",
+                'device_id': f"COW_NORTH_FARM_{i:02d}",
+                'name': f"Vaca Granja Norte {i:02d}",
                 'tag': f"ER{i:03d}",
                 'current_lat': self.base_lat + lat_offset,
                 'current_lng': self.base_lng + lng_offset,
@@ -52,7 +52,7 @@ class Simple10CowsEmulator:
         print("=" * 60)
         print(f"Ubicacion base: {self.base_lat}, {self.base_lng}")
         print(f"Animales: ER001 - ER010")
-        print(f"Device IDs: COW_GPS_ER_01 - COW_GPS_ER_10")
+        print(f"Device IDs: COW_NORTH_FARM_01 - COW_NORTH_FARM_10")
         print(f"Actualizacion: cada 20 segundos")
         print("=" * 60)
 

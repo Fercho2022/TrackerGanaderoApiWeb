@@ -6,6 +6,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Cryptography;
 using System.Text;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using Microsoft.IdentityModel.Tokens;
 
 namespace ApiWebTrackerGanado.Controllers
 {
@@ -14,10 +17,12 @@ namespace ApiWebTrackerGanado.Controllers
     public class UsersController : ControllerBase
     {
         private readonly IUserRepository _userRepository;
+        private readonly IConfiguration _configuration;
 
-        public UsersController(IUserRepository userRepository)
+        public UsersController(IUserRepository userRepository, IConfiguration configuration)
         {
             _userRepository = userRepository;
+            _configuration = configuration;
         }
 
         [HttpGet]
@@ -134,10 +139,13 @@ namespace ApiWebTrackerGanado.Controllers
                 return Unauthorized("Account is inactive");
             }
 
+            // Generate real JWT token
+            var jwtToken = GenerateJwtToken(user);
+
             // Create the response in the format expected by Blazor MAUI
             var authResponse = new AuthResponseDto
             {
-                Token = "temporary-token", // Here you would generate a real JWT token
+                Token = jwtToken,
                 Expiration = DateTime.UtcNow.AddHours(24),
                 User = new UserDto
                 {
@@ -196,6 +204,35 @@ namespace ApiWebTrackerGanado.Controllers
         private static bool VerifyPassword(string password, string hash)
         {
             return HashPassword(password) == hash;
+        }
+
+        private string GenerateJwtToken(User user)
+        {
+            var jwtSecret = _configuration["JWT:Secret"] ??
+                throw new InvalidOperationException("JWT Secret is not configured");
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret));
+            var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+            var claims = new[]
+            {
+                new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+                new Claim(JwtRegisteredClaimNames.Email, user.Email),
+                new Claim("name", user.Name),
+                new Claim("role", user.Role),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                new Claim(JwtRegisteredClaimNames.Iat,
+                    new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds().ToString(),
+                    ClaimValueTypes.Integer64)
+            };
+
+            var token = new JwtSecurityToken(
+                claims: claims,
+                expires: DateTime.UtcNow.AddHours(24),
+                signingCredentials: credentials
+            );
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
         }
     }
 }

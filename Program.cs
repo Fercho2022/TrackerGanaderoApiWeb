@@ -13,6 +13,7 @@ using ApiWebTrackerGanado.Dtos;
 using ApiWebTrackerGanado.Models;
 using ApiWebTrackerGanado.Repositories;
 using ApiWebTrackerGanado.Middleware;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +26,31 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new() { Title = "Cattle Tracking API", Version = "v1" });
+
+    // Define the JWT bearer scheme
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] {}
+        }
+    });
 });
 
 // Database Configuration
@@ -55,13 +81,18 @@ builder.Services.AddScoped<ITrackingService, TrackingService>();
 builder.Services.AddScoped<IAlertService, AlertService>();
 builder.Services.AddScoped<IPastureService, PastureService>();
 
+// Customer & License Management Services
+builder.Services.AddScoped<LicenseService>();
+builder.Services.AddScoped<TrackerDiscoveryService>();
+builder.Services.AddScoped<FarmTrackerIntegrationService>();
+
 // Background Services
 builder.Services.AddHostedService<AlertProcessingService>();
 builder.Services.AddHostedService<BreedingAnalysisService>();
 
 // Authentication - TEMPORALLY DISABLED
 // TODO: Re-enable authentication when implemented properly
-/*
+
 var jwtSecret = builder.Configuration["JWT:Secret"] ??
     throw new InvalidOperationException("JWT Secret is not configured");
 
@@ -95,7 +126,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 // Authorization
 builder.Services.AddAuthorization();
-*/
 
 // SignalR
 builder.Services.AddSignalR(options =>
@@ -120,6 +150,16 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials(); // Required for SignalR
+    });
+
+    options.AddPolicy("Production", policyBuilder =>
+    {
+        policyBuilder
+            // TODO: Replace with actual production frontend URL
+            .WithOrigins("http://localhost:3000", "http://localhost:5000", "https://localhost:5001", "http://192.168.1.100:5192")
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials();
     });
 });
 
@@ -153,11 +193,18 @@ app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseHttpsRedirection();
 
-app.UseCors("AllowAll");
+if (!app.Environment.IsDevelopment())
+{
+    app.UseCors("Production");
+}
+else
+{
+    app.UseCors("AllowAll");
+}
 
 // TODO: Re-enable authentication when implemented properly
-// app.UseAuthentication();
-// app.UseAuthorization();
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<LiveTrackingHub>("/tracking-hub");

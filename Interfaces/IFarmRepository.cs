@@ -1,4 +1,5 @@
-﻿using ApiWebTrackerGanado.Models;
+﻿using ApiWebTrackerGanado.Dtos;
+using ApiWebTrackerGanado.Models;
 
 namespace ApiWebTrackerGanado.Interfaces
 {
@@ -14,5 +15,13 @@ namespace ApiWebTrackerGanado.Interfaces
         Task<Farm?> GetFarmWithPasturesAsync(int id);
         Task<Farm?> GetFarmWithBoundariesAsync(int id);
         Task<bool> ExistsAsync(int id);
+
+        // New methods for boundary coordinates
+        Task<Farm?> GetByIdWithBoundariesAsync(int id);
+        Task<IEnumerable<Farm>> GetAllWithBoundariesAsync();
+        Task<IEnumerable<Farm>> GetFarmsByUserWithBoundariesAsync(int userId);
+        Task SetFarmBoundariesAsync(int farmId, List<LatLngDto> boundaries);
+        Task ClearFarmBoundariesAsync(int farmId);
+        Task<List<LatLngDto>> GetFarmBoundariesAsync(int farmId);
     }
 }

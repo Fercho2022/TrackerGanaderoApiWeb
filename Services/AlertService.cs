@@ -1,5 +1,6 @@
 ﻿using ApiWebTrackerGanado.Data;
 using ApiWebTrackerGanado.Dtos;
+using ApiWebTrackerGanado.Helpers;
 using ApiWebTrackerGanado.Hubs;
 using ApiWebTrackerGanado.Interfaces;
 using ApiWebTrackerGanado.Models;
@@ -30,20 +31,24 @@ namespace ApiWebTrackerGanado.Services
 
         public async Task CheckLocationAlertsAsync(Animal animal, LocationHistory location)
         {
-            // TODO: Re-implement PostGIS-based alerts when Location property is restored
-            // Temporarily disabled to resolve NullReferenceException during PostGIS migration
+            // Check if animal is outside farm boundaries using new boundary system
+            var farm = await _farmRepository.GetByIdWithBoundariesAsync(animal.FarmId);
 
-            /*
-            // Check if animal is outside farm boundaries
-            var farm = await _farmRepository.GetFarmWithBoundariesAsync(animal.FarmId);
-
-            if (farm?.Boundaries != null && !farm.Boundaries.Contains(location.Location))
+            if (farm?.BoundaryCoordinates != null && farm.BoundaryCoordinates.Any())
             {
-                await CreateAlertAsync(animal, "OutOfBounds", "High",
-                    $"{animal.Name} has left the farm boundaries");
+                bool isInsideFarm = GeofencingHelper.IsPointInPolygon(
+                    location.Latitude,
+                    location.Longitude,
+                    farm.BoundaryCoordinates);
+
+                if (!isInsideFarm)
+                {
+                    await CreateAlertAsync(animal, "OutOfBounds", "High",
+                        $"{animal.Name} has left the farm boundaries");
+                }
             }
 
-            // Check immobility
+            // Check immobility using coordinate-based calculations
             var recentLocations = await _locationHistoryRepository
                 .GetRecentLocationsAsync(animal.Id, 2);
 
@@ -51,22 +56,25 @@ namespace ApiWebTrackerGanado.Services
             {
                 var locations = recentLocations.ToList();
                 var maxDistance = 0.0;
-                var centerPoint = locations.First().Location;
+                var firstLocation = locations.First();
 
                 foreach (var loc in locations)
                 {
-                    var distance = centerPoint.Distance(loc.Location);
+                    var distance = GeofencingHelper.CalculateDistance(
+                        firstLocation.Latitude, firstLocation.Longitude,
+                        loc.Latitude, loc.Longitude);
+
                     if (distance > maxDistance)
                         maxDistance = distance;
                 }
 
-                if (maxDistance < 0.0001)
+                // If the animal hasn't moved more than 10 meters in the last 20 readings
+                if (maxDistance < 10)
                 {
                     await CreateAlertAsync(animal, "Immobility", "Medium",
                         $"{animal.Name} has been immobile for over 2 hours");
                 }
             }
-            */
         }
 
         public async Task CheckActivityAlertsAsync(Animal animal, int activityLevel)
@@ -116,13 +124,17 @@ namespace ApiWebTrackerGanado.Services
             {
                 Id = a.Id,
                 Type = a.Type,
+                Title = GetAlertTitle(a.Type, a.Severity),
                 Severity = a.Severity,
                 Message = a.Message,
                 AnimalId = a.AnimalId,
-                AnimalName = a.Animal.Name,
+                FarmId = a.Animal?.FarmId,
+                AnimalName = a.Animal?.Name ?? "N/A",
+                FarmName = a.Animal?.Farm?.Name,
                 IsRead = a.IsRead,
                 IsResolved = a.IsResolved,
-                CreatedAt = a.CreatedAt
+                CreatedAt = a.CreatedAt,
+                ResolvedAt = a.ResolvedAt
             });
         }
 
@@ -167,17 +179,33 @@ namespace ApiWebTrackerGanado.Services
             {
                 Id = alert.Id,
                 Type = alert.Type,
+                Title = GetAlertTitle(alert.Type, alert.Severity),
                 Severity = alert.Severity,
                 Message = alert.Message,
                 AnimalId = alert.AnimalId,
+                FarmId = animal.FarmId,
                 AnimalName = animal.Name,
                 IsRead = alert.IsRead,
                 IsResolved = alert.IsResolved,
-                CreatedAt = alert.CreatedAt
+                CreatedAt = alert.CreatedAt,
+                ResolvedAt = alert.ResolvedAt
             };
 
             await _hubContext.Clients.Group($"farm_{animal.FarmId}")
                 .SendAsync("NewAlert", alertDto);
+        }
+
+        private static string GetAlertTitle(string type, string severity)
+        {
+            return type switch
+            {
+                "OutOfBounds" => "🚨 Animal Fuera del Área",
+                "LowActivity" => "😴 Baja Actividad",
+                "HighActivity" => "🏃 Alta Actividad",
+                "Immobility" => "🛑 Animal Inmóvil",
+                "PossibleHeat" => "🔥 Posible Celo",
+                _ => $"⚠️ Alerta {severity}"
+            };
         }
     }
 }

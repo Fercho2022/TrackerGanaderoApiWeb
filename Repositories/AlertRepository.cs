@@ -22,7 +22,11 @@ namespace ApiWebTrackerGanado.Repositories
 
         public async Task<IEnumerable<Alert>> GetAllAsync()
         {
-            return await _context.Alerts.ToListAsync();
+            return await _context.Alerts
+                .Include(a => a.Animal)
+                .ThenInclude(a => a.Farm)
+                .OrderByDescending(a => a.CreatedAt)
+                .ToListAsync();
         }
 
         public async Task<Alert> AddAsync(Alert alert)
@@ -48,6 +52,7 @@ namespace ApiWebTrackerGanado.Repositories
         {
             var query = _context.Alerts
                 .Include(a => a.Animal)
+                .ThenInclude(a => a.Farm)
                 .Where(a => a.Animal.FarmId == farmId);
 
             if (onlyActive)

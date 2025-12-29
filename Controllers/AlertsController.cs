@@ -10,13 +10,40 @@ namespace ApiWebTrackerGanado.Controllers
     [ApiController]
     public class AlertsController : ControllerBase
     {
-        private readonly AlertService _alertService;
+        private readonly IAlertService _alertService;
         private readonly IAlertRepository _alertRepository;
 
-        public AlertsController(AlertService alertService, IAlertRepository alertRepository)
+        public AlertsController(IAlertService alertService, IAlertRepository alertRepository)
         {
             _alertService = alertService;
             _alertRepository = alertRepository;
+        }
+
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<AlertDto>>> GetAllAlerts([FromQuery] bool? isResolved = null)
+        {
+            var alerts = await _alertRepository.GetAllAsync();
+            var alertDtos = alerts.Select(a => new AlertDto
+            {
+                Id = a.Id,
+                Type = a.Type,
+                Title = GetAlertTitle(a.Type, a.Severity),
+                Severity = a.Severity,
+                Message = a.Message,
+                AnimalId = a.AnimalId,
+                FarmId = a.Animal?.FarmId,
+                AnimalName = a.Animal?.Name ?? "N/A",
+                FarmName = a.Animal?.Farm?.Name,
+                IsRead = a.IsRead,
+                IsResolved = a.IsResolved,
+                CreatedAt = a.CreatedAt,
+                ResolvedAt = a.ResolvedAt
+            });
+
+            if (isResolved.HasValue)
+                alertDtos = alertDtos.Where(a => a.IsResolved == isResolved.Value);
+
+            return Ok(alertDtos.OrderByDescending(a => a.CreatedAt));
         }
 
         [HttpGet("farm/{farmId}")]
@@ -85,6 +112,19 @@ namespace ApiWebTrackerGanado.Controllers
             });
 
             return Ok(alertDtos);
+        }
+
+        private static string GetAlertTitle(string type, string severity)
+        {
+            return type switch
+            {
+                "OutOfBounds" => "🚨 Animal Fuera del Área",
+                "LowActivity" => "😴 Baja Actividad",
+                "HighActivity" => "🏃 Alta Actividad",
+                "Immobility" => "🛑 Animal Inmóvil",
+                "PossibleHeat" => "🔥 Posible Celo",
+                _ => $"⚠️ Alerta {severity}"
+            };
         }
     }
 }

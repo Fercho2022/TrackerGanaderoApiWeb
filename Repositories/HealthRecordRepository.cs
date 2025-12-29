@@ -16,12 +16,19 @@ namespace ApiWebTrackerGanado.Repositories
 
         public async Task<HealthRecord?> GetByIdAsync(int id)
         {
-            return await _context.HealthRecords.FindAsync(id);
+            return await _context.HealthRecords
+                .Include(hr => hr.Animal)
+                    .ThenInclude(a => a.Farm)
+                .FirstOrDefaultAsync(hr => hr.Id == id);
         }
 
         public async Task<IEnumerable<HealthRecord>> GetAllAsync()
         {
-            return await _context.HealthRecords.ToListAsync();
+            return await _context.HealthRecords
+                .Include(hr => hr.Animal)
+                    .ThenInclude(a => a.Farm)
+                .OrderByDescending(hr => hr.RecordDate)
+                .ToListAsync();
         }
 
         public async Task<HealthRecord> AddAsync(HealthRecord healthRecord)
@@ -46,8 +53,10 @@ namespace ApiWebTrackerGanado.Repositories
         public async Task<IEnumerable<HealthRecord>> GetAnimalHealthRecordsAsync(int animalId)
         {
             return await _context.HealthRecords
+                .Include(hr => hr.Animal)
+                    .ThenInclude(a => a.Farm)
                 .Where(hr => hr.AnimalId == animalId)
-                .OrderByDescending(hr => hr.TreatmentDate)
+                .OrderByDescending(hr => hr.RecordDate)
                 .ToListAsync();
         }
 
@@ -69,7 +78,7 @@ namespace ApiWebTrackerGanado.Repositories
             return await _context.HealthRecords
                 .Include(hr => hr.Animal)
                 .Where(hr => hr.Animal.FarmId == farmId && hr.Treatment == treatment)
-                .OrderByDescending(hr => hr.TreatmentDate)
+                .OrderByDescending(hr => hr.RecordDate)
                 .ToListAsync();
         }
 
@@ -78,8 +87,8 @@ namespace ApiWebTrackerGanado.Repositories
             return await _context.HealthRecords
                 .Include(hr => hr.Animal)
                 .Where(hr => hr.Animal.FarmId == farmId &&
-                            hr.TreatmentDate >= from &&
-                            hr.TreatmentDate <= to &&
+                            hr.RecordDate >= from &&
+                            hr.RecordDate <= to &&
                             hr.Cost.HasValue)
                 .SumAsync(hr => hr.Cost!.Value);
         }

@@ -19,9 +19,8 @@ namespace ApiWebTrackerGanado.Models
         public double Latitude { get; set; }
         public double Longitude { get; set; }
 
-        // Temporarily disable boundaries due to PostGIS serialization issues
-        [System.ComponentModel.DataAnnotations.Schema.NotMapped]
-        public Polygon? Boundaries { get; set; }
+        // Farm boundary coordinates stored in separate table
+        public ICollection<FarmBoundary> BoundaryCoordinates { get; set; } = new List<FarmBoundary>();
 
         public int UserId { get; set; }
         public User User { get; set; } = null!;

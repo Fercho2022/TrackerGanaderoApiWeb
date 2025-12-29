@@ -26,24 +26,29 @@ namespace ApiWebTrackerGanado.Mappings
                 .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(src => DateTime.UtcNow));
 
             // Health records mappings
-            CreateMap<HealthRecord, HealthRecordDto>();
+            CreateMap<HealthRecord, HealthRecordDto>()
+                .ForMember(dest => dest.AnimalName, opt => opt.MapFrom(src => src.Animal.Name))
+                .ForMember(dest => dest.AnimalTag, opt => opt.MapFrom(src => src.Animal.Tag))
+                .ForMember(dest => dest.FarmName, opt => opt.MapFrom(src => src.Animal.Farm.Name));
             CreateMap<CreateHealthRecordDto, HealthRecord>()
                 .ForMember(dest => dest.Id, opt => opt.Ignore())
+                .ForMember(dest => dest.Animal, opt => opt.Ignore())
                 .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(src => DateTime.UtcNow));
 
             // Alert mappings
             CreateMap<Alert, AlertDto>()
                 .ForMember(dest => dest.AnimalName, opt => opt.MapFrom(src => src.Animal.Name));
 
-            // Farm mappings with geometry conversion
+            // Farm mappings with boundary coordinates
             CreateMap<Farm, FarmDto>()
                 .ForMember(dest => dest.BoundaryCoordinates, opt => opt.MapFrom(src =>
-                    src.Boundaries != null ? GeometryHelper.ConvertPolygonToLatLng(src.Boundaries) : null));
+                    src.BoundaryCoordinates != null ?
+                    src.BoundaryCoordinates.OrderBy(b => b.SequenceOrder)
+                        .Select(b => new LatLngDto { Lat = b.Latitude, Lng = b.Longitude })
+                        .ToList() : new List<LatLngDto>()));
 
             CreateMap<CreateFarmDto, Farm>()
-                .ForMember(dest => dest.Boundaries, opt => opt.MapFrom(src =>
-                    src.BoundaryCoordinates != null && src.BoundaryCoordinates.Any() ?
-                    GeometryHelper.CreatePolygonFromGoogleMapsCoordinates(src.BoundaryCoordinates) : null))
+                .ForMember(dest => dest.BoundaryCoordinates, opt => opt.Ignore()) // Handle separately in controller
                 .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(src => DateTime.UtcNow))
                 .ForMember(dest => dest.Id, opt => opt.Ignore())
                 .ForMember(dest => dest.UserId, opt => opt.Ignore());

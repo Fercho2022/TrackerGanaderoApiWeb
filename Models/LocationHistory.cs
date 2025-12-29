@@ -6,11 +6,18 @@ namespace ApiWebTrackerGanado.Models
     {
         public int Id { get; set; }
 
-        public int AnimalId { get; set; }
-        public Animal Animal { get; set; } = null!;
+        public int? AnimalId { get; set; }
+        public Animal? Animal { get; set; }
 
-        public int TrackerId { get; set; }
-        public Tracker Tracker { get; set; } = null!;
+        public int? TrackerId { get; set; }
+        public Tracker? Tracker { get; set; }
+
+        /// <summary>
+        /// Device ID del tracker que envió esta ubicación
+        /// Usado para detección automática de nuevos trackers
+        /// </summary>
+        [System.ComponentModel.DataAnnotations.StringLength(100)]
+        public string? DeviceId { get; set; }
 
         // Temporarily disabled for PostGIS migration
         [System.ComponentModel.DataAnnotations.Schema.NotMapped]

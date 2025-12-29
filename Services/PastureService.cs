@@ -49,8 +49,9 @@ namespace ApiWebTrackerGanado.Services
                 // Get animals currently in this pasture
                 var animalsInPasture = await _context.LocationHistories
                     .Where(lh => lh.Timestamp >= DateTime.UtcNow.AddMinutes(-10) && // Last 10 minutes
-                                lh.Location.Within(pasture.Area))
-                    .Select(lh => lh.AnimalId)
+                                lh.Location.Within(pasture.Area) &&
+                                lh.AnimalId.HasValue) // Only include records with valid AnimalId
+                    .Select(lh => lh.AnimalId.Value)
                     .Distinct()
                     .ToListAsync();
 
